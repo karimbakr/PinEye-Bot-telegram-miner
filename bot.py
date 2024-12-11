@@ -1,24 +1,17 @@
-import importlib.util
-import subprocess
-import sys
-import httpx  # تم إضافة httpx
+import aiohttp
+import asyncio
 import json
-import random
-from time import sleep
-from colorama import init, Fore, Style
-from rich.console import Console
-from rich.progress import Spinner
-import time
-import os
-import pyfiglet
+from colorama import Fore, init , Style
 from datetime import datetime
+import os
+import importlib.util 
+import pyfiglet
+import  subprocess
+import sys
+libraries = ["httpx", "requests", "colorama", "rich", "pyfiglet"]
 
-libraries = ["httpx", "requests", "colorama", "rich", "pyfiglet"]  # إضافة httpx إلى قائمة المكتبات
-
-# إعداد Rich و Colorama
-console = Console()
+# تهيئة colorama لدعم الألوان في الأنظمة المختلفة
 init(autoreset=True)
-
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
@@ -69,310 +62,212 @@ def print_info_box(social_media_usernames):
         color = colors[i % len(colors)]
         print(color + f'| {social}: {username} |')
     print(Fore.WHITE + Style.BRIGHT + '+' + '-' * (box_width - 2) + '+')
+def print_message(message, color):
+    """طباعة رسالة مع تاريخ ولون محدد"""
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # تحديد اللون باستخدام colorama
+    if color == "green":
+        color_code = Fore.GREEN
+    elif color == "blue":
+        color_code = Fore.BLUE
+    elif color == "magenta":
+        color_code = Fore.MAGENTA
+    elif color == "red":
+        color_code = Fore.RED
+    elif color == "cyan":
+        color_code = Fore.CYAN
+    else:
+        color_code = Fore.WHITE  # اللون الافتراضي
 
-# دالة الانتظار مع تأخير عشوائي
-def wait_with_random_delay(message: str = "Processing your request..."):
-    delay = random.randint(10, 19)
-    with console.status(f"[bold cyan]{message}", spinner="dots") as status:
-        for i in range(delay):
-            sleep(1)
-            status.update(f"[bold green]{message} ({i+1}/{delay} seconds)")
-    console.print(f"[bold magenta]Done! Total wait time: {delay} seconds.")
+    # طباعة الرسالة مع اللون المحدد
+    print(f"{color_code}[{current_time}] {message}")
 
-# دالة لقراءة بيانات المستخدم من ملف
-
-# قراءة بيانات المستخدم من ملف
-def get_user_from_file(file_path):
+async def read_userinfo_from_file(filename):
+    """قراءة قيمة userinfo من ملف خارجي"""
     try:
-        with open(file_path, 'r', encoding='utf-8') as file:
-            return file.read().strip()
+        with open(filename, 'r', encoding='utf-8') as file:
+            userinfo = file.read().strip()
+            return userinfo
     except FileNotFoundError:
-        print(f"{Fore.RED}Error: File not found at {file_path}")
-        return None
-    except Exception as e:
-        print(f"{Fore.RED}Error reading the file: {str(e)}")
+        print_message(f"Error: File '{filename}' not found.", "red")
         return None
 
-# استرجاع التوكين مع إعادة المحاولة
-def extract_token(max_retries=5, retry_delay=5):
-    user_info = get_user_from_file('data.txt')
-    if not user_info:
-        return f"{Fore.RED}Error: Could not load user information from data.txt"
+async def send_request():
+    url = "https://api2.pineye.io/api/v2/Login"
+    
+    # قراءة userinfo من الملف
+    userinfo = await read_userinfo_from_file("data.txt")
+    if not userinfo:
+        return None
 
-    url = "https://api.pineye.io/api/v2/Login"
-    payload = {"userinfo": user_info}
-    headers = {
-        'User-Agent': get_user_agent(),
-        'Accept': "application/json",
-        'Content-Type': "application/json",
+    payload = {
+        "userinfo": userinfo
     }
 
-    retries = 0
-    while retries < max_retries:
-        try:
-            with httpx.Client() as client:
-                response = client.post(url, json=payload, headers=headers)
-                if response.status_code == 200:
-                    response_data = response.json()
-                    token = response_data.get('data', {}).get('token')
-                    if token:
-                        print(f"{Fore.GREEN}Token retrieved successfully: {token}")
-                        return token
-                    else:
-                        print(f"{Fore.RED}Token not found in the response. Retrying...")
-                else:
-                    print(f"{Fore.RED}Request failed with status code: {response.status_code}. Retrying...")
-        except Exception as e:
-            print(f"{Fore.RED}An error occurred: {str(e)}. Retrying...")
+    headers = {
+        'User-Agent': get_user_agent(),
+        'Accept': "application/json, text/plain, */*",
+        'Content-Type': "application/json",
+        'sec-ch-ua': "\"Not-A.Brand\";v=\"99\", \"Chromium\";v=\"124\"",
+        'chatid': "707813877",
+        'sec-ch-ua-mobile': "?1",
+        'sec-ch-ua-platform': "\"Android\"",
+        'origin': "https://app.pineye.io",
+        'sec-fetch-site': "same-site",
+        'sec-fetch-mode': "cors",
+        'sec-fetch-dest': "empty",
+        'referer': "https://app.pineye.io/",
+        'accept-language': "en-US,en;q=0.9"
+    }
 
-        retries += 1
-        sleep(retry_delay)  # الانتظار قبل إعادة المحاولة
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, json=payload, headers=headers) as response:
+            result = await response.json()
 
-    return f"{Fore.RED}Failed to retrieve token after {max_retries} attempts."
+            # استخراج التوكن والبيانات الأخرى
+            token = result.get("data", {}).get("token", "Token not found")
+            balance = result.get("data", {}).get("profile", {}).get("balance", "Balance not found")
+            level = result.get("data", {}).get("profile", {}).get("level", {}).get("no", "Level not found")
 
-# وظيفة لإرجاع User-Agent (كمثال)
+            # طباعة النتائج بشكل جمالي
+            print_message(f"Welcome Sir: {token[:10]}", "green")
+            print_message(f"Balance: {balance}", "blue")
+            print_message(f"Level: {level}", "magenta")
+
+            return token
+
+async def send_DailyReward(token):
+    url = "https://api2.pineye.io/api/v1/DailyReward/claim"
+
+    headers = {
+        'User-Agent': get_user_agent(),
+        'Accept': "application/json, text/plain, */*",
+        'sec-ch-ua': "\"Not-A.Brand\";v=\"99\", \"Chromium\";v=\"124\"",
+        'sec-ch-ua-mobile': "?1",
+        'authorization': f"Bearer {token}",
+        'x-chat-id': "707813877",
+        'sec-ch-ua-platform': "\"Android\"",
+        'origin': "https://app.pineye.io",
+        'sec-fetch-site': "same-site",
+        'sec-fetch-mode': "cors",
+        'sec-fetch-dest': "empty",
+        'referer': "https://app.pineye.io/",
+        'accept-language': "en-US,en;q=0.9"
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, headers=headers) as response:
+            if response.status == 400:
+                print_message("DailyReward: Today Is Done", "magenta")
+            elif response.status == 200:
+                	print_message("DailyReward: Successful ✅", "magenta")
+                	
+            else:
+                print_message(f"Error: {response.status}, {await response.text()}", "red")
 
 
-# جلب التاريخ والوقت الحالي
-def get_current_datetime():
-    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+async def seend_clk(token):
+    url = "https://api2.pineye.io/api/v1/Tap"
+    co = ("1")
+    params = {
+        'count': f"{co}"
+    }
+    
+    headers = {
+        'User-Agent': get_user_agent(),
+        'Accept': "application/json, text/plain, */*",
+        'sec-ch-ua': "\"Not-A.Brand\";v=\"99\", \"Chromium\";v=\"124\"",
+        'sec-ch-ua-mobile': "?1",
+        'authorization': f"Bearer {token}",
+        'x-chat-id': "707813877",
+        'sec-ch-ua-platform': "\"Android\"",
+        'origin': "https://app.pineye.io",
+        'sec-fetch-site': "same-site",
+        'sec-fetch-mode': "cors",
+        'sec-fetch-dest': "empty",
+        'referer': "https://app.pineye.io/",
+        'accept-language': "en-US,en;q=0.9"
+    }
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, params=params, headers=headers) as response:
+            response_json = await response.json()
 
-# استدعاء Tap API
-def perform_tap_request(token):
-    count = fetch_booster_data(token)
-    if not token:
-        print(f"{Fore.RED}Error: Token is required for this request.")
+            # استخراج maxEnergy و currentEnergy
+            max_energy = response_json["data"]["energy"]["maxEnergy"]
+            current_energy = response_json["data"]["energy"]["currentEnergy"]
+            #count = response_json["data"]["appliedTapCount"]
+
+            # طباعة القيم المستخرجة
+            print_message(f"MaxEnergy: {max_energy}", "green")
+            print_message(f"currentEnergy: {current_energy}", "green")
+            energy_decrement = max_energy - current_energy
+            if energy_decrement > 0:
+                print_message(f"Total win: {energy_decrement}. You win this amount! For Now ", "blue")
+            await asyncio.sleep(6)
+            if current_energy <= 50:
+            	print_message(f"currentEnergy: {current_energy} is Down script stop for a while ..", "green")
+            	await asyncio.sleep(1800)
+            	
+            
+async def fetch_quest(token):
+    url = "https://api2.pineye.io/api/v1/Social"
+    
+    headers = {
+        'User-Agent': get_user_agent(),
+        'Accept': "application/json, text/plain, */*",
+        'sec-ch-ua': "\"Not-A.Brand\";v=\"99\", \"Chromium\";v=\"124\"",
+        'sec-ch-ua-mobile': "?1",
+        'authorization': f"Bearer {token}",
+        'x-chat-id': "707813877",
+        'sec-ch-ua-platform': "\"Android\"",
+        'origin': "https://app.pineye.io",
+        'sec-fetch-site': "same-site",
+        'sec-fetch-mode': "cors",
+        'sec-fetch-dest': "empty",
+        'referer': "https://app.pineye.io/",
+        'accept-language': "en-US,en;q=0.9"
+    }
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers) as response:
+            # تحويل الرد إلى JSON
+            response_json = await response.json()
+
+            # طباعة البيانات للتحقق من الهيكل
+           # print(json.dumps(response_json, indent=2))
+
+            # التحقق من وجود مفتاح "data" في الاستجابة
+            if "data" in response_json and isinstance(response_json["data"], list):
+                # استخراج كل id حيث isClaimed يساوي false
+                ids = [item.get("id") for item in response_json["data"] if item.get("isClaimed") == False]
+
+                # حفظ جميع الـ ids في ملف quid.txt
+                with open("quid.txt", "w") as file:
+                    file.write("\n".join(str(id) for id in ids))
+
+                print(f"IDs saved to quid.txt: {ids}")
+            else:
+                print("The 'data' key is not in the expected format or not found.")
+# تشغيل الدالة
+
+
+async def claim_social_id(token):
+    # قراءة القيم من ملف quid.txt
+    try:
+        with open("quid.txt", "r") as file:
+            social_ids = file.readlines()
+        
+        # إزالة الأسطر الفارغة والبيانات غير المرغوب فيها
+        social_ids = [social_id.strip() for social_id in social_ids if social_id.strip()]
+        
+    except FileNotFoundError:
+        print("File 'quid.txt' not found!")
         return
 
-    url = "https://api.pineye.io/api/v1/Tap"
-    params = {'count': count}
-    headers = {
-        'User-Agent': get_user_agent(),
-        'Accept': "application/json",
-        'authorization': f"Bearer {token}",
-        'Origin': "https://launch.gominers.xyz",
-        'Sec-Fetch-Site': "cross-site",
-        'Sec-Fetch-Mode': "cors",
-        'Sec-Fetch-Dest': "empty",
-        'Referer': "https://launch.gominers.xyz/",
-        'Accept-Language': "en-US,en;q=0.9",
-        'Date-Time': get_current_datetime()
-    }
-
-    try:
-        print(f"{Fore.BLUE}[{get_current_datetime()}] Sending Tap request with count: {count}")
-        with httpx.Client() as client:  # استخدام httpx بدلاً من requests
-            response = client.get(url, params=params, headers=headers)
-            if response.status_code == 200:
-                response_data = response.json()
-                balance = response_data.get('data', {}).get('balance', None)
-                energy = response_data.get('data', {}).get('energy', {})
-                current_energy = energy.get('currentEnergy', None)
-                max_energy = energy.get('maxEnergy', None)
-                print(f"[{get_current_datetime()}]"+f"{Fore.CYAN} You win Coins: {count}")
-                print(f"[{get_current_datetime()}]"+f"{Fore.CYAN} Balance: {balance}")
-                print(f"[{get_current_datetime()}]"+f"{Fore.CYAN} Current Energy: {current_energy}")
-                print(f"[{get_current_datetime()}]"+f"{Fore.CYAN} Max Energy: {max_energy}")
-            if balance == 200000:
-            	buy_booster(token)
-            	print(f"[{get_current_datetime()}]"+f"{Fore.CYAN} Updat Now Boster: ")
-
-            if current_energy == max_energy:
-                print(get_current_datetime()+f"{Fore.RED}Max Energy reached. Waiting for 30 minutes...")
-                time.sleep(1800)
-                print(f"{Fore.GREEN}Energy has been replenished!")
-    except httpx.HTTPStatusError as e:
-        print(f"{Fore.RED}HTTP Status Error: {str(e)}")
-    except Exception as e:
-        print(f"{Fore.RED}An error occurred: {str(e)}")
-
-
-
-def fetch_card_ids(token):
-    url = "https://api.pineye.io/api/v1/PranaGame/Marketplace"
-
-    headers = {
-        'User-Agent': "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
-        'Accept': "application/json, text/plain, */*",
-        'sec-ch-ua': "\"Not-A.Brand\";v=\"99\", \"Chromium\";v=\"124\"",
-        'sec-ch-ua-mobile': "?1",
-        'authorization': f"Bearer {token}",
-        'x-chat-id': "707813877",
-        'sec-ch-ua-platform': "\"Android\"",
-        'origin': "https://app.pineye.io",
-        'sec-fetch-site': "same-site",
-        'sec-fetch-mode': "cors",
-        'sec-fetch-dest': "empty",
-        'referer': "https://app.pineye.io/",
-        'accept-language': "en-US,en;q=0.9"
-    }
-
-    while True:  # إعادة المحاولة حتى ننجح
-        try:
-            with httpx.Client() as client:
-                response = client.get(url, headers=headers)
-
-                if response.status_code == 200:
-                    data = response.json()
-                     # عرض الرد بالكامل
-
-                    # استخراج البيانات من "categories"
-                    data_section = data.get('data', {})
-                    categories = data_section.get('categories', [])
-
-                    # قائمة لتخزين الأيدي المستخرجة
-                    extracted_ids = []
-
-                    if not categories:
-                        print(f"{Fore.RED}No categories found in response.")
-                        return []
-
-                    # استخراج الأيدي الخاصة بكل قسم ومجموعة داخل الأقسام
-                    for category in categories:
-                        collections = category.get('collections', [])
-                        for collection in collections:
-                            cards = collection.get('cards', [])
-                            for card in cards:
-                                # فحص وجود 'title' في البطاقة
-                                if 'title' in card:
-                                    card_id = card.get('id')
-                                    extracted_ids.append(card_id)
-                                    print(f"{Fore.GREEN}Extracted cardId: {card_id} with title: {card.get('title')}")
-
-                    if extracted_ids:
-                        print(f"{Fore.GREEN}Extracted cardIds:")
-
-                        # حفظ الأيدي في ملف profit.txt
-                        with open("profit.txt", "w") as file:
-                            for card_id in extracted_ids:
-                                file.write(f"{card_id}\n")  # كتابة كل id في سطر جديد
-                        print(f"{Fore.GREEN}Card IDs have been saved to profit.txt.")
-                    else:
-                        print(f"{Fore.RED}No cards with title found.")
-
-                    return extracted_ids  # الخروج بعد النجاح
-
-                else:
-                    print(f"{Fore.RED}Error: {response.status_code} - {response.text}")
-                    print(f"{Fore.YELLOW}Retrying...")  # رسالة تفيد بإعادة المحاولة
-                    time.sleep(5)  # تأخير 5 ثوانٍ قبل المحاولة التالية
-
-        except httpx.RequestError as exc:
-            print(f"{Fore.RED}An error occurred while making the request: {exc}")
-            print(f"{Fore.YELLOW}Retrying...")  # رسالة تفيد بإعادة المحاولة
-            time.sleep(5)  # تأخير 5 ثوانٍ قبل المحاولة التالية
-
-# استدعاء الدالة مع إدخال التوكين
-
-
-# استدعاء الدالة مع إدخال التوكين
-
-
-def fetch_booster_data(token):
-    url = "https://api.pineye.io/api/v1/Booster"
-    headers = {
-        'User-Agent': get_user_agent(),
-        'Accept': "application/json",
-        'authorization': f"Bearer {token}",
-        'Origin': "https://launch.gominers.xyz",
-        'Sec-Fetch-Site': "cross-site",
-        'Sec-Fetch-Mode': "cors",
-        'Sec-Fetch-Dest': "empty",
-        'Referer': "https://launch.gominers.xyz/",
-        'Accept-Language': "en-US,en;q=0.9",
-        'Date-Time': get_current_datetime()
-    }
-
-    try:
-        print(f"{Fore.BLUE}[{get_current_datetime()}] Sending Booster request...")
-        # استخدام httpx بدلاً من requests
-        with httpx.Client() as client:
-            response = client.get(url, headers=headers)
-
-            if response.status_code == 200:
-                data = response.json()
-                # إذا كانت البيانات تحتوي على عنصر "Multitap"
-                for item in data.get('data', []):
-                    if item.get('title') == 'Multitap':
-                        current_level = item.get('currentLevel', 0)
-                        return current_level + 1
-                print(f"{Fore.YELLOW}No 'Multitap' found in the response data.")
-            else:
-                print(f"{Fore.RED}Request failed with status code {response.status_code}")
-    except httpx.RequestError as e:
-        print(f"{Fore.RED}A request error occurred: {str(e)}")
-    except Exception as e:
-        print(f"{Fore.RED}An error occurred: {str(e)}")
-
-    # في حالة فشل أي شيء، نرجع 1 بشكل افتراضي
-    return 1
-    
-def fetch_and_save_ids(token, max_retries=5, retry_delay=5):
-    url = "https://api.pineye.io/api/v1/Social"
-    
-    headers = {
-        'User-Agent': get_user_agent(),
-        'Accept': "application/json, text/plain, */*",
-        'sec-ch-ua': "\"Not-A.Brand\";v=\"99\", \"Chromium\";v=\"124\"",
-        'sec-ch-ua-mobile': "?1",
-        'authorization': f"Bearer {token}",
-        'x-chat-id': "707813877",
-        'sec-ch-ua-platform': "\"Android\"",
-        'origin': "https://app.pineye.io",
-        'sec-fetch-site': "same-site",
-        'sec-fetch-mode': "cors",
-        'sec-fetch-dest': "empty",
-        'referer': "https://app.pineye.io/",
-        'accept-language': "en-US,en;q=0.9"
-    }
-    
-    retries = 0
-    while retries < max_retries:
-        try:
-            with httpx.Client() as client:
-                response = client.get(url, headers=headers)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    ids = extract_ids(data)
-                    
-                    with open("quest.txt", "w") as file:
-                        for _id in ids:
-                            file.write(f"{_id}\n")
-                    
-                    print(f"{Fore.GREEN}Extracted {len(ids)} IDs and saved to quest.txt.")
-                    return  # نجاح، إنهاء الوظيفة
-                
-                else:
-                    print(f"{Fore.YELLOW}Error: {response.status_code} - {response.text}")
-                    retries += 1
-                    print(f"{Fore.YELLOW}Retrying... Attempt {retries}/{max_retries}")
-                    time.sleep(retry_delay)
-                    
-        except httpx.RequestError as exc:
-            print(f"{Fore.RED}An error occurred while making the request: {exc}")
-            retries += 1
-            print(f"{Fore.YELLOW}Retrying... Attempt {retries}/{max_retries}")
-            time.sleep(retry_delay)
-    
-    print(f"{Fore.RED}Failed to fetch data after {max_retries} retries.")
-
-# استخراج الـ IDs من البيانات المستلمة
-def extract_ids(data):
-    ids = []
-    if isinstance(data, dict):
-        for key, value in data.items():
-            if key == "id":
-                ids.append(value)
-            elif isinstance(value, (dict, list)):
-                ids.extend(extract_ids(value))
-    elif isinstance(data, list):
-        for item in data:
-            ids.extend(extract_ids(item))
-    return ids
-
-def claim_social_follower(token, max_retries=5, retry_delay=5):
-    url = "https://api.pineye.io/api/v1/SocialFollower/claim"
+    # إعداد الرابط والرؤوس
+    url = "https://api2.pineye.io/api/v1/SocialFollower/claim"
 
     headers = {
         'User-Agent': get_user_agent(),
@@ -390,139 +285,35 @@ def claim_social_follower(token, max_retries=5, retry_delay=5):
         'accept-language': "en-US,en;q=0.9"
     }
 
-    try:
-        # قراءة القيم من الملف
-        with open("quest.txt", "r") as file:
-            social_ids = [line.strip() for line in file if line.strip()]
-        
-        if not social_ids:
-            print(f"{Fore.RED}Error: The file quest.txt is empty.")
-            return
-        
-        # قراءة المؤشر الحالي (آخر قيمة تم معالجتها)
-        if os.path.exists("current_index.txt"):
-            with open("current_index.txt", "r") as index_file:
-                current_index = int(index_file.read().strip() or 0)
-        else:
-            current_index = 0
+    # إرسال الطلبات لكل socialId
+    async with aiohttp.ClientSession() as session:
+        for social_id in social_ids:
+            params = {
+                'socialId': social_id
+            }
 
-        # بدء العملية من المؤشر الحالي
-        with httpx.Client() as client:
-            for i in range(current_index, len(social_ids)):
-                social_id = social_ids[i]
-                params = {'socialId': social_id}
-                retries = 0
-                success = False
-
-                while retries < max_retries and not success:
-                    try:
-                        response = client.post(url, params=params, headers=headers)
-                        if response.status_code == 200:
-                            data = response.json()
-                            print(f"{Fore.GREEN}Success for socialId {social_id}: {data}")
-                            success = True
-                        else:
-                            print(f"{Fore.YELLOW}Error for socialId {social_id}: {response.status_code} - {response.text}")
-                    except httpx.RequestError as exc:
-                        print(f"{Fore.RED}Request error for socialId {social_id}: {exc}")
-                    
-                    if not success:
-                        retries += 1
-                        print(f"{Fore.BLUE}Retrying... Attempt {retries}/{max_retries}")
-                        time.sleep(retry_delay)
+            async with session.post(url, params=params, headers=headers) as response:
+                response_text = await response.json()
                 
-                if not success:
-                    print(f"{Fore.RED}Failed to process socialId {social_id} after {max_retries} retries.")
-                
-                # تحديث المؤشر بعد كل محاولة
-                with open("current_index.txt", "w") as index_file:
-                    index_file.write(str(i + 1))
-                
-                # إضافة تأخير لمنع الحظر
-                time.sleep(5)
+                print_message(f"quest id  : {social_id} : {response_text}" , "green")
+                await asyncio.sleep(10)
 
-            # إذا تمت معالجة جميع الـ IDs في الملف، يتم إنهاء الدالة
-            if i == len(social_ids) - 1:
-                print(f"{Fore.GREEN}All social IDs have been processed. Exiting the function.")
-                return
+# تشغيل الكودclaim_social_id
 
-    except FileNotFoundError:
-        print(f"{Fore.RED}Error: The file quest.txt was not found.")
-    except Exception as exc:
-        print(f"{Fore.RED}An unexpected error occurred: {exc}")
-
-
-# تعريف الدالة لشراء البوستر باستخدام httpx
-def buy_booster(token,  max_retries=5, retry_delay=5):
-    url = "https://api.pineye.io/api/v2/profile/BuyBooster"
-    id = random.randint(1,2)
-    params = {
-        'boosterId': id
-    }
-
-    headers = {
-        'User-Agent': "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
-        'Accept': "application/json, text/plain, */*",
-        'sec-ch-ua': "\"Not-A.Brand\";v=\"99\", \"Chromium\";v=\"124\"",
-        'sec-ch-ua-mobile': "?1",
-        'authorization': f"Bearer {token}",
-        'x-chat-id': "707813877",
-        'sec-ch-ua-platform': "\"Android\"",
-        'origin': "https://app.pineye.io",
-        'sec-fetch-site': "same-site",
-        'sec-fetch-mode': "cors",
-        'sec-fetch-dest': "empty",
-        'referer': "https://app.pineye.io/",
-        'accept-language': "en-US,en;q=0.9"
-    }
-
-    retries = 0
-    while retries < max_retries:
-        try:
-            with httpx.Client() as client:
-                response = client.post(url, params=params, headers=headers)
-                
-                if response.status_code == 200:
-                    print(f"{Fore.GREEN}Booster purchased successfully! Response: {response.json()}")
-                    return response.json()  # نجاح، إنهاء الوظيفة مع إرجاع الرد
-                else:
-                    print(f"{Fore.YELLOW}Error: {response.status_code} - {response.text}")
-                    retries += 1
-                    print(f"{Fore.YELLOW}Retrying... Attempt {retries}/{max_retries}")
-                    time.sleep(retry_delay)
-        except httpx.RequestError as exc:
-            print(f"{Fore.RED}An error occurred while making the request: {exc}")
-            retries += 1
-            print(f"{Fore.YELLOW}Retrying... Attempt {retries}/{max_retries}")
-            time.sleep(retry_delay)
-    
-    print(f"{Fore.RED}Failed to purchase booster after {max_retries} retries.")
-    return None  # فشل العملية بعد استنفاد المحاولات
-
-# استدعاء الدالة
-
-
-
-def main():
+async def main():
     create_gradient_banner("Bot Pin Eye")  # عرض الشعار
     print_info_box([("Telegram", "https://t.me/YOU742"), ("Coder", "@Ke4oo")])  # معلومات وسائل التواصل
     print(Fore.GREEN + "Welcome to the Script!")
-    
-    token = extract_token()  # استخراج التوكين
-    if token and "Error" not in token:
-        #fetch_card_ids(token)
-        fetch_and_save_ids(token)    
-        wait_with_random_delay()
-        claim_social_follower(token)
-          # الانتظار مع تأخير عشوائي
+    token = await send_request()
+    if token and token != "Token not found":
+        await fetch_quest(token)
+        await claim_social_id(token)        
+        await seend_clk(token)
+        await send_DailyReward(token)
         while True:
-        	perform_tap_request(token) 
-        	
-        	wait_with_random_delay()
-         # تنفيذ طلب Tap
-    else:
-        print(token)
+        	await seend_clk(token)
 
-if __name__ == "__main__":
-    
-    main()
+        	                
+
+# تشغيل البرنامج
+asyncio.run(main())
