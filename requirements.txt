@@ -1,0 +1,6 @@
+httpx
+rich
+colorama
+requests
+pyfiglet
+aiohttp
