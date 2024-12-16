@@ -8,7 +8,7 @@ import importlib.util
 import pyfiglet
 import  subprocess
 import sys
-libraries = ["httpx", "requests", "colorama", "rich", "pyfiglet"]
+libraries = ["httpx", "requests", "colorama", "aiohttp", "pyfiglet"]
 
 # تهيئة colorama لدعم الألوان في الأنظمة المختلفة
 init(autoreset=True)
@@ -168,12 +168,15 @@ async def send_DailyReward(token):
 
 
 async def seend_clk(token):
+    token = await send_request()
+    if not token:
+        print_message("Failed to fetch token. Exiting...", "red")
+        return
+
     url = "https://api2.pineye.io/api/v1/Tap"
-    co = ("1")
-    params = {
-        'count': f"{co}"
-    }
-    
+    co = "1"
+    params = {'count': f"{co}"}
+
     headers = {
         'User-Agent': get_user_agent(),
         'Accept': "application/json, text/plain, */*",
@@ -189,26 +192,38 @@ async def seend_clk(token):
         'referer': "https://app.pineye.io/",
         'accept-language': "en-US,en;q=0.9"
     }
-    
+
     async with aiohttp.ClientSession() as session:
         async with session.get(url, params=params, headers=headers) as response:
-            response_json = await response.json()
+            if response.status != 200:
+                print_message(f"Error: Received status code {response.status}", "red")
+                return
 
-            # استخراج maxEnergy و currentEnergy
-            max_energy = response_json["data"]["energy"]["maxEnergy"]
-            current_energy = response_json["data"]["energy"]["currentEnergy"]
-            #count = response_json["data"]["appliedTapCount"]
+            content_type = response.headers.get('Content-Type', '').lower()
+            if 'application/json' in content_type:
+                try:
+                    response_json = await response.json()
+                    max_energy = response_json["data"]["energy"]["maxEnergy"]
+                    current_energy = response_json["data"]["energy"]["currentEnergy"]
+                    
+                    print_message(f"MaxEnergy: {max_energy}", "green")
+                    print_message(f"currentEnergy: {current_energy}", "green")
 
-            # طباعة القيم المستخرجة
-            print_message(f"MaxEnergy: {max_energy}", "green")
-            print_message(f"currentEnergy: {current_energy}", "green")
-            energy_decrement = max_energy - current_energy
-            if energy_decrement > 0:
-                print_message(f"Total win: {energy_decrement}. You win this amount! For Now ", "blue")
-            await asyncio.sleep(6)
-            if current_energy <= 50:
-            	print_message(f"currentEnergy: {current_energy} is Down script stop for a while ..", "green")
-            	await asyncio.sleep(1800)
+                    energy_decrement = max_energy - current_energy
+                    if energy_decrement > 0:
+                        print_message(f"Total win: {energy_decrement}. You win this amount! For Now ", "blue")
+
+                    await asyncio.sleep(6)
+
+                    if current_energy <= 50:
+                        print_message(f"currentEnergy: {current_energy} is Down. Script stops for a while ..", "green")
+                        await asyncio.sleep(1800)  # الانتظار لمدة 30 دقيقة إذا كانت الطاقة منخفضة
+
+                except Exception as e:
+                    print_message(f"Error decoding JSON: {e}", "red")
+            else:
+                print_message(f"Unexpected content type: {content_type}", "red")
+                print(await response.text())
             	
             
 async def fetch_quest(token):
