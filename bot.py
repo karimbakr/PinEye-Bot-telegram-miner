@@ -8,7 +8,7 @@ import importlib.util
 import pyfiglet
 import  subprocess
 import sys
-libraries = ["httpx", "requests", "colorama", "aiohttp", "pyfiglet"]
+libraries = ["httpx", "requests", "colorama", "rich", "pyfiglet"]
 
 # تهيئة colorama لدعم الألوان في الأنظمة المختلفة
 init(autoreset=True)
@@ -174,7 +174,7 @@ async def seend_clk(token):
         return
 
     url = "https://api2.pineye.io/api/v1/Tap"
-    co = "1"
+    co = "23"
     params = {'count': f"{co}"}
 
     headers = {
@@ -226,6 +226,8 @@ async def seend_clk(token):
                 print(await response.text())
             	
             
+
+
 async def fetch_quest(token):
     url = "https://api2.pineye.io/api/v1/Social"
     
@@ -247,24 +249,35 @@ async def fetch_quest(token):
     
     async with aiohttp.ClientSession() as session:
         async with session.get(url, headers=headers) as response:
-            # تحويل الرد إلى JSON
-            response_json = await response.json()
+            # التحقق من نوع المحتوى
+            content_type = response.headers.get('Content-Type')
+            if 'application/json' in content_type:
+                try:
+                    # تحويل الرد إلى JSON
+                    response_json = await response.json()
 
-            # طباعة البيانات للتحقق من الهيكل
-           # print(json.dumps(response_json, indent=2))
+                    # طباعة البيانات للتحقق من الهيكل
+                    # print(json.dumps(response_json, indent=2))
 
-            # التحقق من وجود مفتاح "data" في الاستجابة
-            if "data" in response_json and isinstance(response_json["data"], list):
-                # استخراج كل id حيث isClaimed يساوي false
-                ids = [item.get("id") for item in response_json["data"] if item.get("isClaimed") == False]
+                    # التحقق من وجود مفتاح "data" في الاستجابة
+                    if "data" in response_json and isinstance(response_json["data"], list):
+                        # استخراج كل id حيث isClaimed يساوي false
+                        ids = [item.get("id") for item in response_json["data"] if item.get("isClaimed") == False]
 
-                # حفظ جميع الـ ids في ملف quid.txt
-                with open("quid.txt", "w") as file:
-                    file.write("\n".join(str(id) for id in ids))
+                        # حفظ جميع الـ ids في ملف quid.txt
+                        with open("quid.txt", "w") as file:
+                            file.write("\n".join(str(id) for id in ids))
 
-                print(f"IDs saved to quid.txt: {ids}")
+                        print(f"IDs saved to quid.txt: {ids}")
+                    else:
+                        print("The 'data' key is not in the expected format or not found.")
+                except Exception as e:
+                    print(f"Error processing JSON response: {e}")
             else:
-                print("The 'data' key is not in the expected format or not found.")
+                print(f"Unexpected content type: {content_type}")
+                html_content = await response.text()
+                print(f"Response body:\n{html_content}")
+
 # تشغيل الدالة
 
 
