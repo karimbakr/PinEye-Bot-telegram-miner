@@ -99,6 +99,7 @@ async def send_request():
     # قراءة userinfo من الملف
     userinfo = await read_userinfo_from_file("data.txt")
     if not userinfo:
+        print_message("User info file is empty or missing!", "red")
         return None
 
     payload = {
@@ -122,20 +123,35 @@ async def send_request():
     }
 
     async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=payload, headers=headers) as response:
-            result = await response.json()
+        try:
+            async with session.post(url, json=payload, headers=headers) as response:
+                # تحقق من حالة الاستجابة
+                if response.status != 200:
+                    print_message(f"HTTP Error: {response.status}", "red")
+                    print_message(f"Response text: {await response.text()}", "yellow")
+                    return None
 
-            # استخراج التوكن والبيانات الأخرى
-            token = result.get("data", {}).get("token", "Token not found")
-            balance = result.get("data", {}).get("profile", {}).get("balance", "Balance not found")
-            level = result.get("data", {}).get("profile", {}).get("level", {}).get("no", "Level not found")
+                try:
+                    result = await response.json()
+                except aiohttp.ContentTypeError:
+                    print_message("Unexpected content type. Response is not JSON.", "red")
+                    print_message(f"Response text: {await response.text()}", "yellow")
+                    return None
 
-            # طباعة النتائج بشكل جمالي
-            print_message(f"Welcome Sir: {token[:10]}", "green")
-            print_message(f"Balance: {balance}", "blue")
-            print_message(f"Level: {level}", "magenta")
+                # استخراج التوكن والبيانات الأخرى
+                token = result.get("data", {}).get("token", "Token not found")
+                balance = result.get("data", {}).get("profile", {}).get("balance", "Balance not found")
+                level = result.get("data", {}).get("profile", {}).get("level", {}).get("no", "Level not found")
 
-            return token
+                # طباعة النتائج بشكل جمالي
+                print_message(f"Welcome Sir: {token[:10]}", "green")
+                print_message(f"Balance: {balance}", "blue")
+                print_message(f"Level: {level}", "magenta")
+
+                return token
+        except aiohttp.ClientError as e:
+            print_message(f"Request failed: {str(e)}", "red")
+            return None
 
 async def send_DailyReward(token):
     url = "https://api2.pineye.io/api/v1/DailyReward/claim"
@@ -335,7 +351,7 @@ async def main():
     token = await send_request()
     if token and token != "Token not found":
         await fetch_quest(token)
-        await claim_social_id(token)        
+        #await claim_social_id(token)        
         await seend_clk(token)
         await send_DailyReward(token)
         while True:
